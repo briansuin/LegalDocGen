@@ -1,0 +1,89 @@
+name: Build LegalDocGen
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Build with PyInstaller
+      # Note: Replicating build.bat logic but avoiding 'pause'
+      run: |
+        python -m PyInstaller --noconsole --name "LegalDocGen" --icon=NONE --clean --add-data "src;src" main.py
+    - name: Copy Templates
+      shell: cmd
+      run: |
+        if not exist "dist\LegalDocGen\_internal\templates" mkdir "dist\LegalDocGen\_internal\templates"
+        xcopy templates "dist\LegalDocGen\_internal\templates" /E /I /Y
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LegalDocGen-Windows
+        path: dist/LegalDocGen
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Build
+      run: python build_linux.py
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LegalDocGen-Linux
+        path: dist/LegalDocGen
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Build App
+      run: python build_mac.py
+    - name: Create DMG
+      run: |
+        brew install create-dmg
+        mkdir -p dist/dmg
+        create-dmg \
+          --volname "LegalDocGen Installer" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "LegalDocGen.app" 200 190 \
+          --hide-extension "LegalDocGen.app" \
+          --app-drop-link 600 185 \
+          "dist/dmg/LegalDocGen.dmg" \
+          "dist/LegalDocGen.app"
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LegalDocGen-macOS-DMG
+        path: dist/dmg/LegalDocGen.dmg
