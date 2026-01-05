@@ -10,6 +10,7 @@ build/
 dist/
 dist-windows/
 dist-linux/
+dist-mac/
 *.spec
 
 # VS Code

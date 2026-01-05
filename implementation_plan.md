@@ -1,56 +1,43 @@
-# Implementation Plan - Field Management & Template Sync
+# Add Field Name Validation
 
-## Goal Description
-Allow users to **Edit** (Rename Label/ID) and **Delete** fields/sub-fields in the Settings tab. Crucially, these changes should automatically propagate to the linked Word (`.docx`) templates (e.g., renaming `{{old_id}}` to `{{new_id}}`).
+## Goal
+Enforce valid Python identifier naming for input fields (variables) to prevent document generation errors.
 
 ## User Review Required
-> [!WARNING]
-> **Word Template Structure**: Word documents often split text like `{{my_var}}` into multiple XML "runs" (e.g., `{{`, `my`, `_`, `var`, `}}`) due to spellcheck or formatting. Simple find-and-replace might miss some tags. This implementation will use a best-effort text replacement on `paragraph.text`, but **users should manually verify complex templates**.
-
-> [!IMPORTANT]
-> **Delete Behavior**: When deleting a field, the system will attempt to remove the tag `{{deleted_id}}` from the templates completely. This might leave extra spaces or empty lines.
+> [!NOTE]
+> Variable names must start with a letter or underscore and contain only letters, numbers, and underscores. Invalid names will be rejected with a warning message.
 
 ## Proposed Changes
 
-### LegalDocGen
+### `src/views/settings_tab.py`
+- Import `re` module.
+- Add `validate_field_name` helper method.
+    - Regex: `^[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*$` (Allowing Chinese characters as Python 3 supports them in identifiers, which is crucial for this Chinese app).
+    - Actually, `docxtpl` uses Jinja2, which requires valid Python identifiers. Python 3 allows unicode in identifiers.
+    - **Wait**, standard `re` `\w` matches unicode in Python 3 by default.
+    - So check `name.isidentifier()`. This is the most robust Python way.
+    - Also probably want to warn against starting with a number explicitly if `isidentifier()` is too broad or too strict? `isidentifier()` is perfect.
+    - But user specifically mentioned "numbers or symbols". 
+    - I will use `isidentifier()` and also check for keywords? No, keywords are fine in Jinja usually, but better safe.
+    - Let's stick to `isidentifier()`.
 
-#### [MODIFY] [app.py](file:///d:/LegalDocGen/app.py)
+- Update `add_field_to_project`:
+    - Call validation before processing.
+    - Show alert if invalid.
+- Update `edit_field`:
+    - Call validation before processing.
+    - Show alert if invalid.
 
-1.  **UI Updates**:
-    -   Add **"Edit"** and **"Delete"** buttons to the Settings tab (next to Add buttons).
-    -   Enable them only when an item is selected.
-    
-2.  **Logic Updates**:
-    -   `edit_field()`:
-        -   Prompt for new Label and new ID.
-        -   If ID changed:
-            -   Update `project_data`.
-            -   Call `sync_rename_in_templates(old_id, new_id)`.
-    -   `delete_field()`:
-        -   Confirm dialog.
-        -   Remove from `project_data`.
-        -   Call `sync_delete_in_templates(target_id)`.
-
-3.  **Template Sync Helper (New Internal Helper)**:
-    -   `sync_rename_in_templates(old_id, new_id)`:
-        -   Iterate `project_data['templates']`.
-        -   Open each with `python-docx`.
-        -   Iterate Paragraphs and Tables.
-        -   Replace `{{old_id}}` (and variants like `{{ old_id }}`) with `{{new_id}}`.
-        -   Save.
-    -   `sync_delete_in_templates(target_id)`:
-        -   Similar to rename, but replace with empty string ``.
+#### [MODIFY] [settings_tab.py](file:///d:/ProgramingProjects/LegalDocGen/src/views/settings_tab.py)
+- Import `keyword`.
+- Add validation logic in `add_field_to_project` and `edit_field`.
 
 ## Verification Plan
 
 ### Manual Verification
-1.  **Setup**:
-    -   Create a field `old_tag`.
-    -   Add `{{old_tag}}` to a Word template.
-2.  **Rename**:
-    -   Edit `old_tag` -> `new_tag` in UI.
-    -   Check if UI updates.
-    -   Open Word template -> Verify it now says `{{new_tag}}`.
-3.  **Delete**:
-    -   Delete `new_tag`.
-    -   Open Word template -> Verify the tag is gone.
+1.  Open "模板与输入区设置".
+2.  Click "添加新的输入区" (Add Field).
+3.  Try to enter `123test` (Starts with number) -> Expect Warning.
+4.  Try to enter `test-var` (Hyphen) -> Expect Warning.
+5.  Try to enter `valid_var` -> Expect Success.
+6.  Try to enter `合法变量` (Chinese) -> Expect Success (as it's valid in Python 3).

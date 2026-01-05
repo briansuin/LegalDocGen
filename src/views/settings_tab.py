@@ -1,5 +1,6 @@
 import os
 import shutil
+import keyword
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, 
                              QHBoxLayout, QPushButton, QFrame, 
                              QMessageBox, QFileDialog, QInputDialog, QMenu, QApplication)
@@ -49,6 +50,10 @@ class SettingsTab(QWidget):
         btn_add_tpl = QPushButton("添加新的模板文件")
         btn_add_tpl.clicked.connect(self.add_template_to_project)
         hbox_tpl_btns.addWidget(btn_add_tpl)
+        
+        btn_export_tpl = QPushButton("导出模板文件")
+        btn_export_tpl.clicked.connect(self.export_templates)
+        hbox_tpl_btns.addWidget(btn_export_tpl)
         
         btn_del_tpl = QPushButton("删除选中模板")
         btn_del_tpl.setStyleSheet("color: red;")
@@ -171,6 +176,42 @@ class SettingsTab(QWidget):
             self.pm.save_current_project()
             self.load_project_data()
 
+    def export_templates(self):
+        items_to_export = []
+        for i in range(self.settings_template_list.count()):
+            item = self.settings_template_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                items_to_export.append(item.text())
+
+        if not items_to_export:
+            QMessageBox.warning(self, "警告", "请先勾选要导出的模板。")
+            return
+
+        target_dir = QFileDialog.getExistingDirectory(self, "选择导出目标文件夹", os.path.expanduser("~"))
+        if not target_dir:
+            return
+
+        project_name = self.pm.project_data.get('project_name', 'Exported_Templates')
+        # Sanitize project name for filesystem
+        safe_project_name = project_name.replace("/", "_").replace("\\", "_").replace(":", "_").replace("*", "").replace("?", "").replace("\"", "").replace("<", "").replace(">", "").replace("|", "").strip()
+        export_path = os.path.join(target_dir, safe_project_name)
+        
+        try:
+            os.makedirs(export_path, exist_ok=True)
+            
+            template_dir = self.pm.get_template_dir()
+            count = 0
+            for t_name in items_to_export:
+                src = os.path.join(template_dir, t_name)
+                dst = os.path.join(export_path, t_name)
+                if os.path.exists(src):
+                    shutil.copy(src, dst)
+                    count += 1
+            
+            QMessageBox.information(self, "导出成功", f"成功导出 {count} 个模板到:\n{export_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"导出过程中发生错误:\n{e}")
+
     def delete_template_file(self):
         items_to_delete = []
         for i in range(self.settings_template_list.count()):
@@ -289,8 +330,12 @@ class SettingsTab(QWidget):
         return None
 
     def add_field_to_project(self):
-        name, ok = QInputDialog.getText(self, "新建输入区", "名称 (将作为标签和标签ID):")
+        name, ok = QInputDialog.getText(self, "新建输入区", "名称 (将作为标签和标签ID):\n(必须以字母或下划线开头，仅包含字母、数字、下划线，不能有空格)")
         if ok and name:
+            if not name.isidentifier() or keyword.iskeyword(name):
+                 QMessageBox.warning(self, "非法名称", f"名称 '{name}' 不是有效的变量名。\n请确保以字母或下划线开头，且不包含空格或特殊符号。")
+                 return
+            
             if self.find_field(self.pm.project_data.get('fields', []), name):
                 QMessageBox.warning(self, "错误", f"名称 '{name}' 已存在。")
                 return
@@ -338,8 +383,12 @@ class SettingsTab(QWidget):
              # Just in case
              return
 
-        new_name, ok = QInputDialog.getText(self, "编辑", "名称:", text=target_field['label'])
+        new_name, ok = QInputDialog.getText(self, "编辑", "名称:\n(必须以字母或下划线开头，仅包含字母、数字、下划线)", text=target_field['label'])
         if ok and new_name:
+            if not new_name.isidentifier() or keyword.iskeyword(new_name):
+                 QMessageBox.warning(self, "非法名称", f"名称 '{new_name}' 不是有效的变量名。\n请确保以字母或下划线开头，且不包含空格或特殊符号。")
+                 return
+                 
             if new_name != old_id:
                 if self.find_field(self.pm.project_data['fields'], new_name):
                     QMessageBox.warning(self, "错误", "名称已存在。")

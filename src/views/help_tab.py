@@ -21,8 +21,8 @@ class HelpTab(QWidget):
         <hr>
         <h3>技术支持</h3>
         <p><b>孙润波 律师</b> &nbsp;&nbsp; 北京市盈科（青岛）律师事务所</p>
-        <p>Wechat: briansuin &nbsp;&nbsp; Email: runbo.sun@gmail.com</p>
-        <p style="text-align: right;">2025-12-25</p>
+        <p>Wechat:  &nbsp;&nbsp; Email:  </p>
+        <p style="text-align: right;">2026-01-04</p>
         """
         
         lbl_help = QLabel(help_text)
