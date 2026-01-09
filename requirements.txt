@@ -1,3 +1,6 @@
 PyQt6
 docxtpl
 pyinstaller
+py3o.template
+openpyxl
+odfpy

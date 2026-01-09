@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from src.views.draft_tab import DraftTab
 from src.views.settings_tab import SettingsTab
 from src.views.help_tab import HelpTab
+from src.views.batch_tab import BatchTab
 
 class MainWindow(QMainWindow):
     def __init__(self, project_manager):
@@ -69,10 +70,12 @@ class MainWindow(QMainWindow):
         self.tab_settings = SettingsTab(self.pm)
         # Draft tab needs reference to Settings for "checked templates"
         self.tab_draft = DraftTab(self.pm, self.tab_settings) 
+        self.tab_batch = BatchTab()
         self.tab_help = HelpTab()
 
         self.tabs.addTab(self.tab_draft, "📝 填写内容")
         self.tabs.addTab(self.tab_settings, "⚙️ 模板与输入区设置")
+        self.tabs.addTab(self.tab_batch, "📧 批量生成")
         self.tabs.addTab(self.tab_help, "❓ 帮助说明")
         
         # Connect Signals

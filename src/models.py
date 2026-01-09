@@ -1,7 +1,7 @@
 import os
 import json
 import shutil
-from src.utils import CONFIG_DIR, TEMPLATE_DIR, ensure_directories, extract_fields_from_docx
+from src.utils import CONFIG_DIR, TEMPLATE_DIR, ensure_directories, extract_fields
 
 class ProjectManager:
     def __init__(self):
@@ -177,7 +177,7 @@ class ProjectManager:
             return
 
         # 1. Sync Templates List
-        disk_files = [f for f in os.listdir(t_dir) if f.endswith('.docx') and not f.startswith('~$')]
+        disk_files = [f for f in os.listdir(t_dir) if (f.endswith('.docx') or f.endswith('.odt')) and not f.startswith('~$')]
         current_list = self.project_data.get('templates', [])
         
         # Add new
@@ -196,7 +196,7 @@ class ProjectManager:
         
         for t_name in current_list: # Use the synced list
             t_path = os.path.join(t_dir, t_name)
-            fields = extract_fields_from_docx(t_path)
+            fields = extract_fields(t_path)
             required_fields.update(fields)
             
         # Update self.project_data['fields']
@@ -284,9 +284,22 @@ class ProjectManager:
                 data = json.load(f)
             pid = data.get('project_id', safe_name)
             folder = os.path.join(TEMPLATE_DIR, pid)
+            
+            def remove_readonly(func, path, exc_info):
+                """
+                Error handler for ``shutil.rmtree``.
+                If the error is due to an access error (read only file)
+                it attempts to add write permission and then retries.
+                If the error is for another reason it re-raises the error.
+                """
+                import stat
+                # Clear the readonly bit and reattempt the removal
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+
             if os.path.exists(folder):
                 try:
-                    shutil.rmtree(folder)
+                    shutil.rmtree(folder, onerror=remove_readonly)
                 except OSError as e:
                     import errno
                     if e.errno == errno.EACCES or e.winerror == 32:

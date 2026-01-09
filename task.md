@@ -1,0 +1,8 @@
+- [x] Implement Filename Prefix/Suffix
+- [x] Verify Prefix/Suffix logic
+- [x] Implement Drag-Drop and Click-to-Copy
+    - [x] Create `DropLabel` class in `src/views/batch_tab.py`
+    - [x] Replace file selection labels with `DropLabel`
+    - [x] Implement `copy_col_variable` for `list_key_cols` (Click to copy `{{...}}`)
+    - [x] Connect signals and test logic
+- [x] Verify Implementation

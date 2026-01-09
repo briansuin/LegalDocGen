@@ -4,6 +4,7 @@ import sys
 import subprocess
 import shutil
 
+
 def run_build():
     print("--- Building LegalDocGen for macOS ---")
     
@@ -24,26 +25,15 @@ def run_build():
         shutil.rmtree("build")
 
     # 3. Define PyInstaller command
-    # Separator: : on Unix, ; on Windows.
-    sep = os.pathsep 
-    
-    # We include 'src' source code because docxtpl might need it or our dynamic imports?
-    # Actually, main.py imports src. PyInstaller analyzes this.
-    # explicit imports usually not needed if code is reachable.
-    # But --add-data is for non-code files.
-    # The 'src' folder IS the code. PyInstaller should bundle it as bytecode/library.
-    # However, `docxtpl` is a hidden import sometimes.
-    
+    # We use sys.executable to ensure we use the same python environment
     cmd = [
-        "pyinstaller",
+        sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--clean",
         "--windowed",  # macOS .app
         "--name", "LegalDocGen",
-        "--add-data", "templates:templates", # Bundle templates folder
+        # We manually copy templates to ensure structure control, so we don't use --add-data here
         "--hidden-import", "docxtpl",
-        # If you have an icon:
-        # "--icon", "assets/icon.icns", 
         "main.py"
     ]
     
@@ -51,8 +41,40 @@ def run_build():
     
     try:
         subprocess.check_call(cmd)
-        print("\n--- Build Successful ---")
-        print("Executable is located at: dist/LegalDocGen.app")
+        print("\n--- PyInstaller Build Successful ---")
+        
+        # 4. Post-Build: Copy templates
+        # Target: dist/LegalDocGen.app/Contents/MacOS/_internal/templates
+        # This structure ensures src/utils.py (frozen logic) finds them.
+        
+        app_path = os.path.join("dist", "LegalDocGen.app")
+        # Inside the .app, usage is: Contents/MacOS/LegalDocGen (exe)
+        # So _internal is usually at Contents/MacOS/_internal (for onedir default in newer PyInstaller)
+        
+        # Verify structure if possible, but standard PyInstaller behavior for macOS windowed:
+        contents_macos = os.path.join(app_path, "Contents", "MacOS")
+        internal_dir = os.path.join(contents_macos, "_internal")
+        dest_templates = os.path.join(internal_dir, "templates")
+        src_templates = "templates"
+        
+        if os.path.exists(src_templates):
+            print(f"Copying templates to {dest_templates}...")
+            # Ensure parent exists (it should if PyInstaller ran correctly)
+            if not os.path.exists(internal_dir):
+                # Fallback if PyInstaller uses a different structure or older version (no _internal)
+                # In older versions, everything is in MacOS/ directly.
+                # Let's check where the binary is?
+                # We will force create _internal if it doesn't exist to match our utils.py logic
+                # which looks for _internal/templates first.
+                os.makedirs(internal_dir, exist_ok=True)
+                
+            shutil.copytree(src_templates, dest_templates, dirs_exist_ok=True)
+            print("Templates copied successfully.")
+        else:
+            print("Warning: 'templates' directory not found in source.")
+
+        print("\n--- macOS Build Complete ---")
+        print(f"App Bundle: {app_path}")
         print("You can run it by double-clicking or: open dist/LegalDocGen.app")
         
     except subprocess.CalledProcessError as e:

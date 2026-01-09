@@ -1,43 +1,50 @@
-# Add Field Name Validation
+# Mail Merge Feature Implementation Plan
 
-## Goal
-Enforce valid Python identifier naming for input fields (variables) to prevent document generation errors.
+## Goal Description
+Add a "Mail Merge" (Batch Generation) feature to the application. This allows users to users to upload an Excel file (containing data like Name, Gender, etc.) and a Word template, and generate multiple documents at once—one for each row in the Excel file.
 
 ## User Review Required
-> [!NOTE]
-> Variable names must start with a letter or underscore and contain only letters, numbers, and underscores. Invalid names will be rejected with a warning message.
+> [!IMPORTANT]
+> **Dependency Addition**: adding `openpyxl` to `requirements.txt` to read Excel files. This is lighter than `pandas` and sufficient for the task.
 
 ## Proposed Changes
 
-### `src/views/settings_tab.py`
-- Import `re` module.
-- Add `validate_field_name` helper method.
-    - Regex: `^[a-zA-Z_\u4e00-\u9fa5][a-zA-Z0-9_\u4e00-\u9fa5]*$` (Allowing Chinese characters as Python 3 supports them in identifiers, which is crucial for this Chinese app).
-    - Actually, `docxtpl` uses Jinja2, which requires valid Python identifiers. Python 3 allows unicode in identifiers.
-    - **Wait**, standard `re` `\w` matches unicode in Python 3 by default.
-    - So check `name.isidentifier()`. This is the most robust Python way.
-    - Also probably want to warn against starting with a number explicitly if `isidentifier()` is too broad or too strict? `isidentifier()` is perfect.
-    - But user specifically mentioned "numbers or symbols". 
-    - I will use `isidentifier()` and also check for keywords? No, keywords are fine in Jinja usually, but better safe.
-    - Let's stick to `isidentifier()`.
+### Configuration
+#### [MODIFY] [requirements.txt](file:///d:/Programing/LegalDocGen/requirements.txt)
+- Add `openpyxl`
+- Add `odfpy` (for ODS support)
 
-- Update `add_field_to_project`:
-    - Call validation before processing.
-    - Show alert if invalid.
-- Update `edit_field`:
-    - Call validation before processing.
-    - Show alert if invalid.
+### Source Code
 
-#### [MODIFY] [settings_tab.py](file:///d:/ProgramingProjects/LegalDocGen/src/views/settings_tab.py)
-- Import `keyword`.
-- Add validation logic in `add_field_to_project` and `edit_field`.
+#### [MODIFY] [src/views/batch_tab.py](file:///d:/Programing/LegalDocGen/src/views/batch_tab.py)
+- **UI Updates**:
+    - **File Loading**: Update filter to include `*.ods` and `*.xlsx`, `*.xls`.
+    - **Filename Selection**: Replace single ComboBox with a new layout allowing users to select *multiple* columns to compose the filename. Use a ListWidget with checkboxes.
+    - **Output Details**: Update UI to reflect that a subfolder will be created.
+- **Logic Updates**:
+    - `load_excel()`: Add logic to read `.ods` files using `odfpy`.
+    - `generate()`: 
+        - Filename Construction: Join values of all selected columns (e.g., "Name_Gender").
+        - **Auto-Subfolder**: Create a directory `Batch_Output_{Date_Time}` inside the selected output folder and save files there.
+
+#### [MODIFY] [src/views/main_window.py](file:///d:/Programing/LegalDocGen/src/views/main_window.py)
+- Import `BatchTab`.
+- Add "📧 批量生成" (Batch Generate) tab to `self.tabs` in `setup_ui`.
+- Enable this tab by default (or manage its state).
 
 ## Verification Plan
 
+### Automated Tests
+- None currently exist for UI.
+- Verify `openpyxl` installation by running the built app or python script.
+
 ### Manual Verification
-1.  Open "模板与输入区设置".
-2.  Click "添加新的输入区" (Add Field).
-3.  Try to enter `123test` (Starts with number) -> Expect Warning.
-4.  Try to enter `test-var` (Hyphen) -> Expect Warning.
-5.  Try to enter `valid_var` -> Expect Success.
-6.  Try to enter `合法变量` (Chinese) -> Expect Success (as it's valid in Python 3).
+1.  **Setup**: Prepare an Excel file (`test.xlsx`) with columns `Name`, `Gender` and 3 rows of data. Prepare a Word template (`invite.docx`) with `{{Name}}` and `{{Gender}}`.
+2.  **Launch**: Run `python main.py`.
+3.  **UI Check**: Verify "批量生成" tab exists.
+4.  **Workflow**:
+    - Select `test.xlsx`. Verify preview shows data correctly.
+    - Select `invite.docx`.
+    - Select Output Folder.
+    - Click Generate.
+5.  **Result**: Check Output Folder. Should contain 3 `.docx` files named after the `Name` column. Open one to verify `{{Name}}` and `{{Gender}}` are replaced correcty.

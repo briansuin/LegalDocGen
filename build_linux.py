@@ -36,7 +36,7 @@ def run_build():
         "--clean",
         "--noconsole",  # GUI mode
         "--name", "LegalDocGen",
-        f"--add-data", f"src{add_data_sep}src", 
+        # We manually copy templates to _internal/templates, so no --add-data needed here
         "main.py"
     ]
     

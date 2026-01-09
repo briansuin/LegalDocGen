@@ -6,8 +6,11 @@ import os
 import datetime
 from src.utils import open_file_or_folder
 
+from src.odt_renderer import OdtTemplate
+
 class DraftTab(QWidget):
     def __init__(self, project_manager, settings_tab):
+
         super().__init__()
         self.pm = project_manager
         self.settings_tab = settings_tab # Reference to get checked templates? 
@@ -166,14 +169,22 @@ class DraftTab(QWidget):
                 continue
             
             try:
-                tpl = DocxTemplate(t_path)
-                tpl.render(context)
-                
-                # Save
                 save_name = f"{t_name}" # Original name
                 save_path = os.path.join(folder_path, save_name)
-                tpl.save(save_path)
-                success_count += 1
+                
+                ext = os.path.splitext(t_name)[1].lower()
+                
+                if ext == '.docx':
+                    tpl = DocxTemplate(t_path)
+                    tpl.render(context)
+                    tpl.save(save_path)
+                    success_count += 1
+                elif ext == '.odt':
+                    # Custom ODT Renderer (Clean & Jinja2)
+                    t = OdtTemplate(t_path)
+                    t.render(context, save_path)
+                    success_count += 1
+
             except Exception as e:
                 print(f"Error generating {t_name}: {e}")
                 QMessageBox.critical(self, "生成错误", f"模版 {t_name} 生成失败: {e}")

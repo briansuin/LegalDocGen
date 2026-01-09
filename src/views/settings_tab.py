@@ -2,7 +2,7 @@ import os
 import shutil
 import keyword
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, 
-                             QHBoxLayout, QPushButton, QFrame, 
+                             QHBoxLayout, QPushButton, QFrame, QSplitter,
                              QMessageBox, QFileDialog, QInputDialog, QMenu, QApplication)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
@@ -20,14 +20,22 @@ class SettingsTab(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         
-        # 1. Templates List
-        layout.addWidget(QLabel("导入模板:"))
+        # Use a Vertical Splitter
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        layout.addWidget(splitter)
+        
+        # --- TOP SECTION: TEMPLATES ---
+        top_widget = QWidget()
+        top_layout = QVBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        
+        top_layout.addWidget(QLabel("导入模板:"))
         
         # Select All Checkbox
         self.chk_select_all_tpl = QCheckBox("全选/全不选")
         self.chk_select_all_tpl.setChecked(True)
         self.chk_select_all_tpl.stateChanged.connect(self.toggle_all_templates)
-        layout.addWidget(self.chk_select_all_tpl)
+        top_layout.addWidget(self.chk_select_all_tpl)
         
         self.settings_template_list = QListWidget()
         self.settings_template_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
@@ -44,7 +52,7 @@ class SettingsTab(QWidget):
         self.settings_template_list.customContextMenuRequested.connect(self.show_template_context_menu)
         
         self.settings_template_list.itemDoubleClicked.connect(self.open_template_file)
-        layout.addWidget(self.settings_template_list)
+        top_layout.addWidget(self.settings_template_list)
         
         hbox_tpl_btns = QHBoxLayout()
         btn_add_tpl = QPushButton("添加新的模板文件")
@@ -60,12 +68,20 @@ class SettingsTab(QWidget):
         btn_del_tpl.clicked.connect(self.delete_template_file)
         hbox_tpl_btns.addWidget(btn_del_tpl)
         
-        layout.addLayout(hbox_tpl_btns)
+        top_layout.addLayout(hbox_tpl_btns)
         
-        layout.addWidget(QFrame(frameShape=QFrame.Shape.HLine))
-
-        # 2. Fields List
-        layout.addWidget(QLabel("输入区 (表单):"))
+        # Add Top Widget to Splitter
+        splitter.addWidget(top_widget)
+        
+        # --- MIDDLE: SEPARATOR (Visual only, Splitter handle acts as separator) ---
+        # No extra line needed if splitter is used, but we can keep margins
+        
+        # --- BOTTOM SECTION: FIELDS ---
+        bottom_widget = QWidget()
+        bottom_layout = QVBoxLayout(bottom_widget)
+        bottom_layout.setContentsMargins(0, 10, 0, 0) # Add top margin for separation
+        
+        bottom_layout.addWidget(QLabel("输入区 (表单):"))
         self.settings_field_list = QListWidget()
         self.settings_field_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         
@@ -77,7 +93,7 @@ class SettingsTab(QWidget):
         self.settings_field_list.dropEvent = wrapped_list_drop
         
         self.settings_field_list.itemClicked.connect(self.copy_field_tag)
-        layout.addWidget(self.settings_field_list)
+        bottom_layout.addWidget(self.settings_field_list)
         
         hbox_btns = QHBoxLayout()
         btn_add_field = QPushButton("添加新的输入区")
@@ -93,7 +109,13 @@ class SettingsTab(QWidget):
         btn_delete.clicked.connect(self.delete_field)
         hbox_btns.addWidget(btn_delete)
         
-        layout.addLayout(hbox_btns)
+        bottom_layout.addLayout(hbox_btns)
+        
+        # Add Bottom Widget to Splitter
+        splitter.addWidget(bottom_widget)
+        
+        # Set initial sizes for splitter (50/50 approx)
+        splitter.setSizes([300, 300])
 
     def load_project_data(self):
         # Refresh Lists
@@ -164,7 +186,7 @@ class SettingsTab(QWidget):
 
 
     def add_template_to_project(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "选择模板文件", os.path.expanduser("~"), "Word Files (*.docx)")
+        files, _ = QFileDialog.getOpenFileNames(self, "选择模板文件", os.path.expanduser("~"), "Word Files (*.docx *.odt)")
         if files:
             target_dir = self.pm.get_template_dir()
             for f in files:
@@ -285,8 +307,11 @@ class SettingsTab(QWidget):
 
         new_name, ok = QInputDialog.getText(self, "重命名模板", "新文件名:", text=old_name)
         if ok and new_name and new_name != old_name:
-            if not new_name.endswith('.docx'):
-                new_name += '.docx'
+            # Preserve or Add extension
+            original_ext = os.path.splitext(old_name)[1]
+            if not os.path.splitext(new_name)[1]:
+                 new_name += original_ext
+            
             new_path = os.path.join(project_dir, new_name)
             if os.path.exists(new_path):
                 QMessageBox.warning(self, "错误", "该文件名已存在。")

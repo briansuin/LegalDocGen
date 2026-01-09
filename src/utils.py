@@ -2,6 +2,7 @@ import os
 import re
 import docx
 import shutil
+import zipfile
 
 import sys
 import platform
@@ -28,11 +29,14 @@ if getattr(sys, 'frozen', False):
         BUNDLED_TEMPLATES_DIR = check_bundled
 
     # Determine Runtime Storage (Destination)
-    # Priority 1: 'data' folder next to exe (Portable Mode)
+    # Priority 1: 'data' folder next to exe (Portable Mode - Explicit)
     if os.path.exists(portable_data_dir):
         BASE_DIR = portable_data_dir
+    # Priority 2: '_internal/templates' exists (Portable Mode - Implicit/Default)
+    elif os.path.exists(os.path.join(internal_dir, "templates")):
+        BASE_DIR = internal_dir
     else:
-        # Installed/Standard Mode
+        # Priority 3: Installed/Standard Mode (Fallback)
         if platform.system() == 'Windows':
             base_storage = os.environ.get('APPDATA', os.path.expanduser("~")) 
             BASE_DIR = os.path.join(base_storage, "LegalDocGen")
@@ -203,7 +207,44 @@ def open_file_or_folder(path):
     else:                                     # Linux
         subprocess.call(['xdg-open', path])
 
-def extract_fields_from_docx(path):
+def extract_fields(path):
+    """
+    Parses a docx or odt file and returns a set of all {{variable}} names found.
+    """
+    if not os.path.exists(path):
+        return set()
+    
+    unique_fields = set()
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext == '.docx':
+        return _extract_from_docx(path)
+    elif ext == '.odt':
+        return _extract_from_odt(path)
+    return set()
+
+def _extract_from_odt(path):
+    unique_fields = set()
+    try:
+        with zipfile.ZipFile(path, 'r') as z:
+            content = z.read('content.xml').decode('utf-8')
+            # Regex for {{...}}
+            matches = re.findall(r"\{\{(.*?)\}\}", content)
+            for m in matches:
+                clean = m.strip()
+                # ODT might insert XML tags inside the braces if formatted?
+                # Simpler regex might strip basic XML tags if they appear, 
+                # but usually py3o expects clean jinja tags.
+                # Let's assume user inputs clean tags for now or use a robust cleaner.
+                # However, XML tags inside {{ }} break Jinja.
+                # Users should type cleanly.
+                if clean:
+                    unique_fields.add(clean)
+    except Exception as e:
+        print(f"Error parsing ODT {path}: {e}")
+    return unique_fields
+
+def _extract_from_docx(path):
     """
     Parses a docx file and returns a set of all {{variable}} names found.
     """
@@ -212,29 +253,32 @@ def extract_fields_from_docx(path):
     
     unique_fields = set()
     try:
-        doc = docx.Document(path)
-        
-        # Helper to scan text
-        def scan_text(text):
-            # Find all {{...}} patterns
-            matches = re.findall(r"\{\{(.*?)\}\}", text)
-            for m in matches:
-                # m is the content inside brackets. 
-                # It might be " Name " -> strip it to "Name"
-                clean = m.strip()
-                if clean:
-                    unique_fields.add(clean)
-
-        # 1. Paragraphs
-        for p in doc.paragraphs:
-            scan_text(p.text)
+        # Use a context manager to ensure the file handle is closed.
+        # python-docx loads the file into memory, so we can close the handle after loading (or after processing).
+        with open(path, 'rb') as f:
+            doc = docx.Document(f)
             
-        # 2. Tables
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for p in cell.paragraphs:
-                        scan_text(p.text)
+            # Helper to scan text
+            def scan_text(text):
+                # Find all {{...}} patterns
+                matches = re.findall(r"\{\{(.*?)\}\}", text)
+                for m in matches:
+                    # m is the content inside brackets. 
+                    # It might be " Name " -> strip it to "Name"
+                    clean = m.strip()
+                    if clean:
+                        unique_fields.add(clean)
+
+            # 1. Paragraphs
+            for p in doc.paragraphs:
+                scan_text(p.text)
+                
+            # 2. Tables
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            scan_text(p.text)
                         
     except Exception as e:
         print(f"Error parsing {path}: {e}")
