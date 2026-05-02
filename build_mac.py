@@ -61,17 +61,26 @@ def run_build():
             print(f"Copying templates to {dest_templates}...")
             # Ensure parent exists (it should if PyInstaller ran correctly)
             if not os.path.exists(internal_dir):
-                # Fallback if PyInstaller uses a different structure or older version (no _internal)
-                # In older versions, everything is in MacOS/ directly.
-                # Let's check where the binary is?
-                # We will force create _internal if it doesn't exist to match our utils.py logic
-                # which looks for _internal/templates first.
                 os.makedirs(internal_dir, exist_ok=True)
                 
             shutil.copytree(src_templates, dest_templates, dirs_exist_ok=True)
             print("Templates copied successfully.")
         else:
             print("Warning: 'templates' directory not found in source.")
+
+        # Copy Citation Library
+        dest_citation = os.path.join(internal_dir, "citation")
+        src_citation = "citation"
+        
+        if os.path.exists(src_citation):
+            print(f"Copying citation library to {dest_citation}...")
+            if not os.path.exists(internal_dir):
+                os.makedirs(internal_dir, exist_ok=True)
+            shutil.copytree(src_citation, dest_citation, dirs_exist_ok=True)
+            print("Citation library copied successfully.")
+        else:
+            print("Warning: 'citation' directory not found in source. Creating empty directory.")
+            os.makedirs(dest_citation, exist_ok=True)
 
         print("\n--- macOS Build Complete ---")
         print(f"App Bundle: {app_path}")

@@ -65,13 +65,22 @@ def run_build():
         
         if os.path.exists(src_dir):
             print(f"Copying templates from {src_dir} to {dest_dir}...")
-            # Cop tree handles creation of dest directory usually if it doesn't exist, 
-            # but shutil.copytree requires dict not to exist for Python < 3.8. 
-            # For safety, let's use copytree with dirs_exist_ok=True (available in 3.8+)
             shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
             print("Templates copied successfully.")
         else:
             print("Warning: 'templates' directory not found in source.")
+            
+        # Copy Citation Library
+        dest_citation = os.path.join("dist", "LegalDocGen", "_internal", "citation")
+        src_citation = "citation"
+        
+        if os.path.exists(src_citation):
+            print(f"Copying citation library to {dest_citation}...")
+            shutil.copytree(src_citation, dest_citation, dirs_exist_ok=True)
+            print("Citation library copied successfully.")
+        else:
+            print("Warning: 'citation' directory not found in source. Creating empty directory.")
+            os.makedirs(dest_citation, exist_ok=True)
             
         print("\n--- Linux Build Complete ---")
         print("Executable is located at: dist/LegalDocGen/LegalDocGen")

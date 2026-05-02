@@ -13,5 +13,9 @@ echo Copying templates to _internal...
 if not exist "dist\LegalDocGen\_internal\templates" mkdir "dist\LegalDocGen\_internal\templates"
 xcopy templates "dist\LegalDocGen\_internal\templates" /E /I /Y
 
+echo Copying citation library to _internal...
+if not exist "dist\LegalDocGen\_internal\citation" mkdir "dist\LegalDocGen\_internal\citation"
+if exist "citation" xcopy citation "dist\LegalDocGen\_internal\citation" /E /I /Y
+
 echo Build Complete! Check the 'dist' folder.
 pause

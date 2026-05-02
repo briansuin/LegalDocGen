@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, 
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QPushButton, 
                              QMessageBox, QLabel, QFileDialog, QScrollArea)
 from PyQt6.QtCore import Qt
 from docxtpl import DocxTemplate
@@ -7,6 +7,7 @@ import datetime
 from src.utils import open_file_or_folder
 
 from src.odt_renderer import OdtTemplate
+from src.views.snippet_completer import SnippetCompleterPopup
 
 class DraftTab(QWidget):
     def __init__(self, project_manager, settings_tab):
@@ -17,7 +18,15 @@ class DraftTab(QWidget):
         # Ideally, Model should manage state, but "checked items" is UI state.
         # We can ask SettingsTab for selection.
         self.input_widgets = {}
+        
+        # Initialize snippet completer popup
+        self.snippet_completer = SnippetCompleterPopup(self)
+        
         self.setup_ui()
+
+    def set_citation_data(self, data: dict):
+        if hasattr(self, 'snippet_completer'):
+            self.snippet_completer.set_data(data)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -27,6 +36,7 @@ class DraftTab(QWidget):
         scroll.setWidgetResizable(True)
         self.form_container = QWidget()
         self.form_layout = QFormLayout(self.form_container)
+        self.form_layout.setVerticalSpacing(4) # Reduce space between rows
         
         # FIX for MacOS: Ensure fields expand to fill width
         self.form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
@@ -66,7 +76,7 @@ class DraftTab(QWidget):
                 
                 # Always create input for the field
                 inp = QLineEdit()
-                inp.setStyleSheet("font-size: 14px; padding: 4px;")
+                inp.setStyleSheet("font-size: 12px; padding: 2px;")
                 
                 # Style Guidelines:
                 # Level 0 (Top Level): Bold, 14px
@@ -74,13 +84,16 @@ class DraftTab(QWidget):
                 
                 label_widget = QLabel(prefix + label_text + ":")
                 if level == 0:
-                    label_widget.setStyleSheet("font-weight: bold; font-size: 14px; margin-top: 5px;")
+                    label_widget.setStyleSheet("font-weight: bold; font-size: 12px; margin-top: 2px;")
                 else:
-                    # Normal style for children but ensure size is 14px
-                    label_widget.setStyleSheet("font-size: 14px;")
+                    # Normal style for children but ensure size is 12px
+                    label_widget.setStyleSheet("font-size: 12px;")
                 
                 self.form_layout.addRow(label_widget, inp)
                 self.input_widgets[field_id] = inp
+                
+                # Attach snippet completer
+                self.snippet_completer.attach_to(inp)
 
                 if 'children' in field and field['children']:
                      # Recurse with increased indentation
@@ -108,22 +121,14 @@ class DraftTab(QWidget):
         missing_fields = []
         
         for fid, widget in self.input_widgets.items():
-            val = widget.text() # User requests allowing spaces, so do not strip()
-            if not val and val != "": 
-                # Actually, if we allow spaces, we might just want to check if len == 0?
-                # But 'val' is string. if val == "": it's empty.
-                # If user wants to replace with empty string, they might just leave it blank?
-                # But typically valid filling requires something.
-                # User specifically asked for "spaces".
-                pass
+            raw_val = widget.text()
+            val = raw_val.strip()
             
-            # Revised Logic:
-            # If user enters " ", keep it.
-            # If user enters "", warn? Or just allow empty?
-            # User said "allow input spaces". 
-            # If I remove strip(), " " is Truthy. "" is Falsy.
+            # If user intentionally typed ONLY spaces (e.g. to bypass empty check), keep a single space
+            if len(raw_val) > 0 and len(val) == 0:
+                val = " "
             
-            if len(val) == 0:
+            if len(val) == 0 and len(raw_val) == 0:
                 # Find label for error message
                 label = fid # fallback
                 missing_fields.append(label)

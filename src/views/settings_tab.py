@@ -109,6 +109,11 @@ class SettingsTab(QWidget):
         btn_delete.clicked.connect(self.delete_field)
         hbox_btns.addWidget(btn_delete)
         
+        btn_backup = QPushButton("💾 信息备份")
+        btn_backup.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold;")
+        btn_backup.clicked.connect(self.create_backup_template)
+        hbox_btns.addWidget(btn_backup)
+        
         bottom_layout.addLayout(hbox_btns)
         
         # Add Bottom Widget to Splitter
@@ -452,3 +457,45 @@ class SettingsTab(QWidget):
             self.save_field_order()
             self.load_project_data() # Reload to clear/refresh
             self.projectChanged.emit()
+
+    def create_backup_template(self):
+        import docx
+        from PyQt6.QtWidgets import QMessageBox
+
+        if not self.pm.current_project_file:
+            QMessageBox.warning(self, "错误", "请先选择或创建一个项目。")
+            return
+
+        backup_name = "信息备份.docx"
+        target_dir = self.pm.get_template_dir()
+        backup_path = os.path.join(target_dir, backup_name)
+
+        try:
+            doc = docx.Document()
+            
+            # Format according to user request: label: {{id}}
+            fields = self.pm.project_data.get('fields', [])
+            for field in fields:
+                label = field.get('label', '')
+                fid = field.get('id', '')
+                if label and fid:
+                    doc.add_paragraph(f"{label}：{{{{{fid}}}}}")
+            
+            doc.save(backup_path)
+            
+            # Add to project templates if not exist
+            if 'templates' not in self.pm.project_data:
+                self.pm.project_data['templates'] = []
+            
+            if backup_name not in self.pm.project_data['templates']:
+                self.pm.project_data['templates'].append(backup_name)
+            
+            # Save project data
+            self.pm.save_current_project()
+            
+            # Reload to show the new template in the list and update UI
+            self.load_project_data()
+            
+            QMessageBox.information(self, "成功", f"模版“{backup_name}”已生成并添加到项目中！\n保存在：{backup_path}\n您现在可以在模板列表中看到它。")
+        except Exception as e:
+            QMessageBox.critical(self, "生成错误", f"生成信息备份模板时出错：\n{e}")

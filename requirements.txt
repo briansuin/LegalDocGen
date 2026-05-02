@@ -4,3 +4,4 @@ pyinstaller
 py3o.template
 openpyxl
 odfpy
+pandas

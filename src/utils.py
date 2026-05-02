@@ -19,6 +19,7 @@ if getattr(sys, 'frozen', False):
     if hasattr(sys, '_MEIPASS'):
         # PyInstaller --onefile mode
         BUNDLED_TEMPLATES_DIR = os.path.join(sys._MEIPASS, "templates")
+        BUNDLED_CITATION_DIR = os.path.join(sys._MEIPASS, "citation")
     else:
         # PyInstaller --onedir mode
         # Check _internal/templates (Windows newer default) or adjacent templates
@@ -27,6 +28,11 @@ if getattr(sys, 'frozen', False):
              # Try adjacent to executable (macOS often places here with --add-data)
              check_bundled = os.path.join(ext_root, "templates")
         BUNDLED_TEMPLATES_DIR = check_bundled
+        
+        check_bundled_cit = os.path.join(internal_dir, "citation")
+        if not os.path.exists(check_bundled_cit):
+             check_bundled_cit = os.path.join(ext_root, "citation")
+        BUNDLED_CITATION_DIR = check_bundled_cit
 
     # Determine Runtime Storage (Destination)
     # Priority 1: 'data' folder next to exe (Portable Mode - Explicit)
@@ -51,12 +57,14 @@ else:
     # Running as script (Dev)
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BUNDLED_TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+    BUNDLED_CITATION_DIR = os.path.join(BASE_DIR, "citation")
 
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+CITATION_DIR = os.path.join(BASE_DIR, "citation")
 
 def ensure_directories():
-    for d in [CONFIG_DIR, TEMPLATE_DIR]:
+    for d in [CONFIG_DIR, TEMPLATE_DIR, CITATION_DIR]:
         os.makedirs(d, exist_ok=True)
     
     # Auto-initialize templates if empty (First Run)
@@ -74,6 +82,21 @@ def ensure_directories():
                         shutil.copy2(s, d)
             except Exception as e:
                 print(f"Error copying default templates: {e}")
+                
+    # Auto-initialize citation library if empty (First Run)
+    if os.path.exists(BUNDLED_CITATION_DIR) and os.path.exists(CITATION_DIR):
+        if not os.listdir(CITATION_DIR):
+            try:
+                print(f"First run detected. Copying citation library from {BUNDLED_CITATION_DIR} to {CITATION_DIR}")
+                for item in os.listdir(BUNDLED_CITATION_DIR):
+                    s = os.path.join(BUNDLED_CITATION_DIR, item)
+                    d = os.path.join(CITATION_DIR, item)
+                    if os.path.isdir(s):
+                        shutil.copytree(s, d, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(s, d)
+            except Exception as e:
+                print(f"Error copying default citation library: {e}")
 
 class SmartSync:
     @staticmethod
@@ -84,8 +107,16 @@ class SmartSync:
         """
         if not os.path.exists(template_path):
             return False
+            
+        ext = os.path.splitext(template_path)[1].lower()
+        if ext != '.docx':
+            return False # Only supported for docx right now
 
-        doc = docx.Document(template_path)
+        try:
+            doc = docx.Document(template_path)
+        except Exception:
+            return False
+
         modified = False
 
         # 1. Paragraphs
@@ -102,8 +133,11 @@ class SmartSync:
                             modified = True
                             
         if modified:
-            doc.save(template_path)
-            return True
+            try:
+                doc.save(template_path)
+                return True
+            except Exception:
+                pass
         return False
 
     @staticmethod
@@ -112,89 +146,29 @@ class SmartSync:
         Helper: Replaces text in a single paragraph object across multiple runs.
         """
         full_text = paragraph.text
-        if f"{{{{{old_var}}}}}" not in full_text:
+        escaped_var = re.escape(old_var)
+        pattern = rf"\{{\{{\s*{escaped_var}\s*\}}\}}"
+        
+        if not re.search(pattern, full_text):
             return False
 
-        # If simple replace works (contained in one run), try that first for speed?
-        # Actually, standard python-docx 'text' assignment kills formatting.
-        # We must iterate runs.
-        
-        # Strategy: Reconstruct runs into a string, track indices, replace in string,
-        # then map back to runs. 
-        # Easier Strategy for "Whole Tag":
-        # 1. Find the start run index and end run index of the tag `{{...}}`
-        # 2. Update the text in those runs.
-        
-        # This implementation below is a simplified version of "Smart Run Replacement" 
-        # commonly used for this exact problem.
-        
-        target = f"{{{{{old_var}}}}}"
         replacement = f"{{{{{new_var}}}}}"
+        modified = False
         
-        # Simple case: if the tag is fully inside one run
+        # Simple case: if the tag is fully inside a run
         for run in paragraph.runs:
-            if target in run.text:
-                run.text = run.text.replace(target, replacement)
-                return True
+            if re.search(pattern, run.text):
+                run.text = re.sub(pattern, replacement, run.text)
+                modified = True
 
-        # Complex case: Tag wraps across runs (e.g. Run1: "{{", Run2: "Name", Run3: "}}")
-        # We need to coalesce.
-        # Allow simple brute force for now since typically users select the whole tag to bold it.
-        # If it is split, python-docx replacement is hard without a deeper library.
-        # Implementing a robust split-run-stitcher is complex.
-        
-        # Fallback: If not found in single runs but found in paragraph,
-        # we have a split formatting issue.
-        # To fix it, we might lose mixed formatting on the tag itself, but keep paragraph style.
-        # Let's try to find the start and end.
-        
-        match = re.search(re.escape(target), full_text)
-        if match:
-            # It exists but wasn't in a single run.
-            # We will clear the runs involved and put the new text in the first one.
-            # This generally preserves the formatting of the START of the tag.
-            
-            curr_index = 0
-            start_run_idx = -1
-            end_run_idx = -1
-            
-            start_char = match.start()
-            end_char = match.end()
-            
-            # Find which runs cover this range
-            for i, run in enumerate(paragraph.runs):
-                run_len = len(run.text)
-                run_start = curr_index
-                run_end = curr_index + run_len
+        # If it wasn't modified in runs, or there are still occurrences wrapping across runs
+        new_full_text = paragraph.text
+        if re.search(pattern, new_full_text):
+            # Fallback: naive full-paragraph replace if split across runs.
+            paragraph.text = re.sub(pattern, replacement, new_full_text)
+            modified = True
                 
-                if start_run_idx == -1 and run_end > start_char:
-                    start_run_idx = i
-                
-                if run_start < end_char:
-                    end_run_idx = i
-                
-                curr_index += run_len
-            
-            if start_run_idx != -1 and end_run_idx != -1:
-                # We have the range of runs.
-                # Logic:
-                # 1. Take text before match in start_run
-                # 2. Add replacement
-                # 3. Take text after match in end_run
-                # 4. Set start_run text to (1+2+3)
-                # 5. Clear intermediate runs
-                
-                # Careful with detailed offsets within the run
-                
-                # Simple approach for now to ensure functionality over perfect style retention on split tags:
-                # Just replace the text in the first run and clear others? No, that deletes valid text.
-                
-                # Let's just do a naive full-paragraph replace if split.
-                # This resets run formatting to paragraph default but ensures data integrity.
-                paragraph.text = full_text.replace(target, replacement)
-                return True
-                
-        return False
+        return modified
 
 def open_file_or_folder(path):
     """
